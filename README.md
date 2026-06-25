@@ -169,7 +169,15 @@ location /mcp {
 
 ## Connecting AI Clients
 
-### Claude Desktop
+### ChatGPT Connector
+
+1. Open ChatGPT → **Settings → Connectors → Create**
+2. Enter **Connector URL**: `https://tours.ct14a1.fun/mcp`
+3. If connected successfully, the tools list will appear automatically
+
+> This server uses anonymous/no-auth for dev mode. For production OAuth 2.1, see [OpenAI MCP Auth docs](https://developers.openai.com/apps-sdk/build/auth).
+
+### Claude Desktop (local stdio)
 
 Add to `claude_desktop_config.json`:
 
@@ -182,28 +190,19 @@ Add to `claude_desktop_config.json`:
       "env": {
         "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/secrets/google-service-account.json",
         "GSC_SITE_URL": "https://wingolf.vn/",
-        "GA4_PROPERTY_ID": "123456789",
-        "GITHUB_TOKEN": "github_pat_xxx",
-        "GITHUB_OWNER": "your-org",
-        "GITHUB_REPO": "your-repo"
+        "GA4_PROPERTY_ID": "123456789"
       }
     }
   }
 }
 ```
 
-### Cursor / Codex / Other AI Clients
-
-If deployed via HTTP:
+### Cursor / Windsurf / Other MCP Clients
 
 ```
-URL: https://mcp.example.com/mcp
-Authorization: Bearer your-token-here
+Transport: Streamable HTTP
+URL: https://tours.ct14a1.fun/mcp
 ```
-
-### ChatGPT (via Custom GPT / Plugin)
-
-Use the Streamable HTTP endpoint with Bearer token in headers.
 
 ---
 
