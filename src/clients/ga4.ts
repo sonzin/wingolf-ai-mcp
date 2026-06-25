@@ -1,7 +1,22 @@
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
+import { google } from "googleapis";
 import { env } from "../config/env.js";
 
 let client: BetaAnalyticsDataClient | null = null;
+
+function createGa4RestAuth() {
+  const keyFile = env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!keyFile) {
+    throw new Error("GOOGLE_APPLICATION_CREDENTIALS is missing. Set it in .env");
+  }
+
+  return new google.auth.GoogleAuth({
+    keyFile,
+    scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+  });
+}
+
+let restAuth: ReturnType<typeof createGa4RestAuth> | null = null;
 
 export function getGa4Client(): BetaAnalyticsDataClient {
   if (client) return client;
@@ -16,6 +31,27 @@ export function getGa4Client(): BetaAnalyticsDataClient {
   });
 
   return client;
+}
+
+export function getGa4RestAuth(): ReturnType<typeof createGa4RestAuth> {
+  if (restAuth) return restAuth;
+  restAuth = createGa4RestAuth();
+  return restAuth;
+}
+
+export async function callGa4Api<T = unknown>(
+  url: string,
+  options: { method?: "GET" | "POST"; body?: unknown } = {}
+): Promise<T> {
+  const auth = getGa4RestAuth();
+  const authClient = await auth.getClient();
+  const response = await authClient.request<T>({
+    url,
+    method: options.method || "GET",
+    data: options.body,
+  });
+
+  return response.data;
 }
 
 export async function runReport(params: {

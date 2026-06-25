@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { querySearchAnalytics } from "../clients/gsc.js";
+import { getSitemap, inspectUrl, listSites, listSitemaps, querySearchAnalytics } from "../clients/gsc.js";
 import { parseDateRange } from "../utils/dates.js";
 import { normalizeError } from "../utils/errors.js";
 
@@ -13,6 +13,32 @@ const DimensionEnum = z.enum([
   "date",
   "searchAppearance",
 ]);
+
+function asTextResult(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+  };
+}
+
+function gscNotConfigured() {
+  return {
+    content: [{ type: "text" as const, text: "GSC is not configured. Set GOOGLE_APPLICATION_CREDENTIALS and GSC_SITE_URL in .env" }],
+  };
+}
+
+function parseJson(value: string | undefined, fallback: unknown): unknown {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function parseDimensionFilterGroups(value: string | undefined) {
+  const parsed = parseJson(value, undefined);
+  return Array.isArray(parsed) ? (parsed as any) : undefined;
+}
 
 export function registerGscTools(server: McpServer) {
   server.registerTool(
@@ -52,9 +78,7 @@ Returns:
     async (params) => {
       try {
         if (!env.isGscConfigured) {
-          return {
-            content: [{ type: "text", text: "GSC is not configured. Set GOOGLE_APPLICATION_CREDENTIALS and GSC_SITE_URL in .env" }],
-          };
+          return gscNotConfigured();
         }
 
         const siteUrl = params.siteUrl || env.GSC_SITE_URL;
@@ -139,9 +163,7 @@ Returns the most clicked and most impressed queries driving traffic to the site.
     async (params) => {
       try {
         if (!env.isGscConfigured) {
-          return {
-            content: [{ type: "text", text: "GSC is not configured. Set GOOGLE_APPLICATION_CREDENTIALS and GSC_SITE_URL in .env" }],
-          };
+          return gscNotConfigured();
         }
 
         const { start, end } = parseDateRange(params.startDate, params.endDate);
@@ -196,9 +218,7 @@ Returns the best-performing pages in organic search.`,
     async (params) => {
       try {
         if (!env.isGscConfigured) {
-          return {
-            content: [{ type: "text", text: "GSC is not configured. Set GOOGLE_APPLICATION_CREDENTIALS and GSC_SITE_URL in .env" }],
-          };
+          return gscNotConfigured();
         }
 
         const { start, end } = parseDateRange(params.startDate, params.endDate);
@@ -227,6 +247,127 @@ Returns the best-performing pages in organic search.`,
           isError: true,
           content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }],
         };
+      }
+    }
+  );
+
+  server.registerTool(
+    "gsc_list_sites",
+    {
+      title: "GSC List Sites",
+      description: "List all Search Console properties accessible to the configured Google credentials.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async () => {
+      try {
+        if (!env.GOOGLE_APPLICATION_CREDENTIALS) return gscNotConfigured();
+        return asTextResult(await listSites());
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "gsc_query_search_analytics",
+    {
+      title: "GSC Query Search Analytics",
+      description: "Query Search Console search analytics with optional dimension filters and up to 25,000 rows.",
+      inputSchema: z.object({
+        siteUrl: z.string().optional().describe("GSC property URL. Defaults to GSC_SITE_URL from env."),
+        startDate: z.string().describe("Start date in YYYY-MM-DD format."),
+        endDate: z.string().describe("End date in YYYY-MM-DD format."),
+        dimensions: z.array(DimensionEnum).optional(),
+        rowLimit: z.number().int().min(1).max(25000).default(1000),
+        startRow: z.number().int().min(0).default(0),
+        dimensionFilterGroupsJson: z.string().optional().describe("Optional JSON array of GSC dimensionFilterGroups."),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ siteUrl, startDate, endDate, dimensions, rowLimit, startRow, dimensionFilterGroupsJson }) => {
+      try {
+        if (!env.isGscConfigured) return gscNotConfigured();
+        const resolvedSiteUrl = siteUrl || env.GSC_SITE_URL;
+        const { start, end } = parseDateRange(startDate, endDate);
+        return asTextResult(await querySearchAnalytics({
+          siteUrl: resolvedSiteUrl,
+          startDate: start,
+          endDate: end,
+          dimensions: dimensions || ["query"],
+          rowLimit,
+          startRow,
+          dimensionFilterGroups: parseDimensionFilterGroups(dimensionFilterGroupsJson),
+        }));
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "gsc_list_sitemaps",
+    {
+      title: "GSC List Sitemaps",
+      description: "List sitemaps submitted to Search Console for a given property.",
+      inputSchema: z.object({
+        siteUrl: z.string().optional().describe("GSC property URL. Defaults to GSC_SITE_URL from env."),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ siteUrl }) => {
+      try {
+        if (!env.isGscConfigured) return gscNotConfigured();
+        return asTextResult(await listSitemaps(siteUrl || env.GSC_SITE_URL));
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "gsc_get_sitemap",
+    {
+      title: "GSC Get Sitemap",
+      description: "Get details for a specific sitemap submitted to Search Console.",
+      inputSchema: z.object({
+        siteUrl: z.string().optional().describe("GSC property URL. Defaults to GSC_SITE_URL from env."),
+        feedpath: z.string().describe("Full sitemap URL, e.g. https://example.com/sitemap.xml"),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ siteUrl, feedpath }) => {
+      try {
+        if (!env.isGscConfigured) return gscNotConfigured();
+        return asTextResult(await getSitemap(siteUrl || env.GSC_SITE_URL, feedpath));
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "gsc_inspect_url",
+    {
+      title: "GSC Inspect URL",
+      description: "Inspect a URL in Search Console: indexation status, last crawl, robots status, and mobile usability where available.",
+      inputSchema: z.object({
+        siteUrl: z.string().optional().describe("GSC property URL. Defaults to GSC_SITE_URL from env."),
+        inspectionUrl: z.string().describe("Full URL to inspect."),
+        languageCode: z.string().default("en-US"),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ siteUrl, inspectionUrl, languageCode }) => {
+      try {
+        if (!env.isGscConfigured) return gscNotConfigured();
+        return asTextResult(await inspectUrl({
+          siteUrl: siteUrl || env.GSC_SITE_URL,
+          inspectionUrl,
+          languageCode,
+        }));
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: `GSC Error: ${normalizeError(error)}` }] };
       }
     }
   );
