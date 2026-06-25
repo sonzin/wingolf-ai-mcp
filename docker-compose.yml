@@ -1,0 +1,14 @@
+services:
+  wingolf-ai-mcp:
+    build: .
+    container_name: wingolf-ai-mcp
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - .env
+    volumes:
+      - ./secrets/google-service-account.json:/app/secrets/google-service-account.json:ro
+    environment:
+      - NODE_ENV=production
+      - MCP_TRANSPORT=http

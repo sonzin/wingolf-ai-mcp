@@ -1,0 +1,32 @@
+{
+  "name": "wingolf-ai-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for wingolf.vn — integrates Google Search Console, Google Analytics 4, and GitHub",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:stdio": "node dist/index.js --stdio",
+    "start:http": "node dist/index.js --http"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google-analytics/data": "^4.9.0",
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@octokit/rest": "^21.0.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
